@@ -10,6 +10,8 @@ import { useTender } from './data/useTender.js';
 import { t } from './i18n/strings.js';
 import { MAX_FILES, MAX_TOTAL_BYTES, looksLikePdf, countPages, sha256 } from './utils/pdf.js';
 import { computeStatus, BLOCKING } from './utils/status.js';
+import { buildPackage, downloadBytes } from './utils/package.js';
+import { checklistCsv, downloadText } from './utils/csv.js';
 
 let nextId = 1;
 
@@ -20,6 +22,8 @@ export default function App() {
   const [files, setFiles] = useState([]);
   const [matches, setMatches] = useState({}); // requirementId -> fileId
   const [expiry, setExpiry] = useState({}); // requirementId -> 'YYYY-MM-DD'
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   const [messages, setMessages] = useState([]); // { id, key, params } translated at render time
 
   const addMessage = (key, params) => setMessages((m) => [...m, { id: nextId++, key, params }]);
@@ -96,6 +100,33 @@ export default function App() {
   const usedBy = {};
   reqs.forEach((r) => { if (matches[r.id] !== undefined) usedBy[matches[r.id]] = r; });
 
+  const unreadable = reqs.filter((r) => {
+    const f = files.find((x) => x.id === matches[r.id]);
+    return f && f.pages === null;
+  });
+
+  const onGenerate = async () => {
+    setBusy(true); setDone(false);
+    try {
+      const items = reqs.filter((r) => matches[r.id] !== undefined)
+        .map((r) => ({ req: r, file: files.find((x) => x.id === matches[r.id]).file }));
+      const bytes = await buildPackage(tender.tender, items);
+      downloadBytes(bytes, `${tender.tender.tender_id.replace(/[\\/:*?"<>|]/g, '_')}_Package.pdf`);
+      setDone(true);
+    } catch (e) {
+      if (e.fileName) addMessage('genError', { name: e.fileName }); else addMessage('genErrorGeneral', {});
+    } finally { setBusy(false); }
+  };
+
+  const onExportCsv = () => {
+    const rows = reqs.map((r) => {
+      const f = files.find((x) => x.id === matches[r.id]);
+      return [lang === 'bn' ? r.title_bn : r.title_en, f ? f.name : '', f && f.pages ? f.pages : '',
+        expiry[r.id] || '', t(lang, `st_${statuses[r.id]}`)];
+    });
+    downloadText(checklistCsv(rows), `${tender.tender.tender_id}_Checklist.csv`);
+  };
+
   const step = !tender ? 0 : files.length === 0 ? 1
     : reqs.some((r) => statuses[r.id] === 'missing') ? 2 : blockers.length ? 3 : 4;
 
@@ -119,7 +150,8 @@ export default function App() {
         <FileList lang={lang} files={files} usedBy={usedBy} dupNames={dupNames} onRemove={removeFile} />
         <RequirementsList lang={lang} tender={tender} files={files} matches={matches} expiry={expiry}
           statuses={statuses} dupGroups={dupGroups} onMatch={onMatch} onExpiry={onExpiry} />
-        <PackagePanel lang={lang} tender={tender} statuses={statuses} blockers={blockers} />
+        <PackagePanel lang={lang} tender={tender} statuses={statuses} blockers={blockers} unreadable={unreadable}
+          busy={busy} done={done} onGenerate={onGenerate} onExportCsv={onExportCsv} />
       </main>
     </div>
   );

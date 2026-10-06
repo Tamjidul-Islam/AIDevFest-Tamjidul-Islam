@@ -28,8 +28,22 @@ React 18, Vite, pdf-lib (page counting now; merging and footers later). English 
 - Shows file name, page count, size; remove files; unreadable PDFs flagged without crashing
 - "What to do next" step guide
 
-## Remaining for later iterations
-Cover page, footers, package generation/download, and bonus features.
+- Iteration 3: package generation and download as `<tender_id>_Package.pdf`
+  - Page 1: English cover (tender ID, title, entity, bidder, deadline, date made, included documents in order)
+  - Then every page of each matched file in `order`, original page order; optional documents without a file are skipped
+  - Footer `<tender_id> | Page X of Y` on every page including the cover. Each document page is placed on a slightly taller page so the footer never covers content
+  - Matched files that cannot be read (damaged / password-protected) block generation with a clear message
+  - Bonus: checklist export to CSV (document, file name, pages, expiry date, status)
+
+## Known problems
+- Bangla text is not drawn on the PDF cover (standard Latin font); non-Latin characters in tender fields appear as `?`
+- Links/form fields inside source PDFs are flattened into the package pages
+
+## Not implemented (bonus)
+Index page, seal/signature, save/reopen, auto-match, AI help.
+
+## Submission checklist
+Add `output/<tender_id>_Package.pdf` (generate it in the app from the sample pack) and a `screenshots/` folder with a screenshot of the status table. Add your name, registration number and live link above.
 
 ## AI tool used
 Claude (Anthropic)
