@@ -1,6 +1,6 @@
 import { t } from '../i18n/strings.js';
 
-export default function RequirementsList({ lang, tender, files, matches, expiry, statuses, dupGroups, onMatch, onExpiry }) {
+export default function RequirementsList({ lang, tender, files, matches, expiry, statuses, dupGroups, onMatch, onExpiry, onAutoMatch }) {
   if (!tender) return null;
   const usedElsewhere = (reqId, fileId) =>
     Object.entries(matches).some(([rid, fid]) => rid !== reqId && fid === fileId);
@@ -10,7 +10,7 @@ export default function RequirementsList({ lang, tender, files, matches, expiry,
     (dupGroups[f.hash] || []).some((o) => o !== f.id && usedElsewhere(reqId, o));
   return (
     <section className="card">
-      <h2>{t(lang, 'reqSection')}</h2>
+      <div className="sectionHead"><h2>{t(lang, 'reqSection')}</h2><button className="secondary" onClick={onAutoMatch} disabled={!files.length}>{t(lang, 'autoMatch')}</button></div>
       <div className="tablewrap">
         <table>
           <thead>

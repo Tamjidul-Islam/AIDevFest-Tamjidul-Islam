@@ -15,7 +15,7 @@ npm run preview   # serve the production build
 ```
 
 ## Technologies
-React 18, Vite, pdf-lib (page counting now; merging and footers later). English and Bangla UI.
+React 18, Vite, pdf-lib (page counting, merging, index and footers). English and Bangla UI.
 
 ## Implemented so far
 - Iteration 2: match files to documents (one-to-one, undo any time), expiry dates, live status engine (Missing / Expiry date needed / Expired / Not provided / OK), SHA-256 duplicate detection (duplicates marked and cannot be matched to different documents), Generate button disabled with reasons
@@ -39,8 +39,12 @@ React 18, Vite, pdf-lib (page counting now; merging and footers later). English 
 - Bangla text is not drawn on the PDF cover (standard Latin font); non-Latin characters in tender fields appear as `?`
 - Links/form fields inside source PDFs are flattened into the package pages
 
-## Not implemented (bonus)
-Index page, seal/signature, save/reopen, auto-match, AI help.
+## Added bonus requirements
+- Index page in generated package with document, source file, and page range
+- Optional seal text and signature label on the cover
+- Save/reopen session as a portable JSON file containing tender data, matches, expiry dates, and uploaded PDFs
+- Filename-based auto-match suggestions that require manual review before generation
+- Built-in help explaining the workflow and browser-only processing
 
 ## Submission checklist
 Add `output/<tender_id>_Package.pdf` (generate it in the app from the sample pack) and a `screenshots/` folder with a screenshot of the status table. Add your name, registration number and live link above.

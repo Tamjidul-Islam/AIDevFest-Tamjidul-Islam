@@ -25,7 +25,7 @@ const today = () => {
 };
 
 // items: [{ req, file }] already sorted by requirement order; file needs name + arrayBuffer()
-export async function buildPackage(tender, items) {
+export async function buildPackage(tender, items, options = {}) {
   const out = await PDFDocument.create();
   const font = await out.embedFont(StandardFonts.Helvetica);
   const bold = await out.embedFont(StandardFonts.HelveticaBold);
@@ -34,12 +34,15 @@ export async function buildPackage(tender, items) {
   for (const it of items) {
     try {
       const doc = await PDFDocument.load(await it.file.arrayBuffer(), { updateMetadata: false });
-      sources.push({ req: it.req, doc });
+      sources.push({ req: it.req, doc, fileName: it.file.name });
     } catch {
       const err = new Error('unreadable'); err.fileName = it.file.name; throw err;
     }
   }
-  const total = 1 + sources.reduce((s, x) => s + x.doc.getPageCount(), 0);
+
+  const sourcePageCount = sources.reduce((s, x) => s + x.doc.getPageCount(), 0);
+  const includeIndex = options.includeIndex !== false;
+  const total = 1 + (includeIndex ? 1 : 0) + sourcePageCount;
   const tid = tender.tender_id;
 
   const footer = (page, n) => {
@@ -64,6 +67,15 @@ export async function buildPackage(tender, items) {
     lines.forEach((ln, i) => cover.drawText(ln, { x: 200, y: y - i * 15, size: 11, font }));
     y -= Math.max(1, lines.length) * 15 + 7;
   }
+  y -= 10;
+  if (options.sealText) {
+    cover.drawCircle({ x: W - 105, y: H - 125, size: 42, borderWidth: 2, borderColor: rgb(0.1, 0.3, 0.8) });
+    cover.drawText(clean(options.sealText).slice(0, 16), { x: W - 138, y: H - 130, size: 9, font: bold });
+  }
+  if (options.signatureText) {
+    cover.drawLine({ start: { x: W - 230, y: 82 }, end: { x: W - 60, y: 82 }, thickness: 1 });
+    cover.drawText(clean(options.signatureText), { x: W - 230, y: 65, size: 9, font });
+  }
   y -= 12;
   cover.drawText('Documents included (in order)', { x: 60, y, size: 14, font: bold });
   y -= 24;
@@ -76,8 +88,31 @@ export async function buildPackage(tender, items) {
   for (const lines of rows) for (const ln of lines) { cover.drawText(ln, { x: 70, y, size, font }); y -= size + 5; }
   footer(cover, 1);
 
+  if (includeIndex) {
+    // ---- Page 2: index ----
+    const index = out.addPage(A4);
+    index.drawText('Document Index', { x: 60, y: H - 80, size: 22, font: bold });
+    let iy = H - 120;
+    index.drawText('#', { x: 60, y: iy, size: 10, font: bold });
+    index.drawText('Document', { x: 90, y: iy, size: 10, font: bold });
+    index.drawText('File', { x: 330, y: iy, size: 10, font: bold });
+    index.drawText('Pages', { x: 500, y: iy, size: 10, font: bold });
+    iy -= 18;
+    let startPage = 3;
+    for (const [i, source] of sources.entries()) {
+      const pageCount = source.doc.getPageCount();
+      index.drawText(String(i + 1), { x: 60, y: iy, size: 10, font });
+      for (const [j, line] of wrap(source.req.title_en, font, 10, 225).entries()) index.drawText(line, { x: 90, y: iy - j * 12, size: 10, font });
+      for (const [j, line] of wrap(source.fileName, font, 9, 155).entries()) index.drawText(line, { x: 330, y: iy - j * 11, size: 9, font });
+      index.drawText(`${startPage}-${startPage + pageCount - 1}`, { x: 500, y: iy, size: 10, font });
+      iy -= Math.max(18, wrap(source.req.title_en, font, 10, 225).length * 12, wrap(source.fileName, font, 9, 155).length * 11) + 8;
+      startPage += pageCount;
+    }
+    footer(index, 2);
+  }
+
   // ---- Documents: each source page is placed on a taller page so the footer never covers content ----
-  let n = 2;
+  let n = includeIndex ? 3 : 2;
   for (const { doc } of sources) {
     for (const src of doc.getPages()) {
       const emb = await out.embedPage(src);

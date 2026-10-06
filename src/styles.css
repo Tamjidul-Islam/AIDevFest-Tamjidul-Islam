@@ -46,3 +46,10 @@ tr.dup { background:#fffbeb; } .dupmsg { color:#b45309; font-size:.85rem; }
 .okmsg { color:#166534; font-weight:600; }
 .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
 button.secondary { background:#fff; color:var(--blue); border:2px solid var(--blue); border-radius:8px; padding:8px 16px; cursor:pointer; font-size:1rem; }
+.sectionHead { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+.sectionHead h2 { margin-bottom:0; }
+.toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.fileButton { display:inline-block; cursor:pointer; }
+.options { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-top:14px; padding:10px; background:#f9fafb; border:1px solid var(--line); border-radius:8px; }
+.options input[type=text], .options input:not([type]) { max-width:220px; }
+.help ul { margin-bottom:0; }

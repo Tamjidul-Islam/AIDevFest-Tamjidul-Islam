@@ -12,6 +12,8 @@ import { MAX_FILES, MAX_TOTAL_BYTES, looksLikePdf, countPages, sha256 } from './
 import { computeStatus, BLOCKING } from './utils/status.js';
 import { buildPackage, downloadBytes } from './utils/package.js';
 import { checklistCsv, downloadText } from './utils/csv.js';
+import { makeSession, readSession, downloadSession } from './utils/session.js';
+import { suggestMatches } from './utils/match.js';
 
 let nextId = 1;
 
@@ -25,6 +27,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [messages, setMessages] = useState([]); // { id, key, params } translated at render time
+  const [packageOptions, setPackageOptions] = useState({ includeIndex: true, sealText: '', signatureText: '' });
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const addMessage = (key, params) => setMessages((m) => [...m, { id: nextId++, key, params }]);
 
@@ -90,27 +94,41 @@ export default function App() {
 
   const onExpiry = (reqId, value) => setExpiry((e) => ({ ...e, [reqId]: value }));
 
-  const reqs = tender ? tender.requirements : [];
-  const statuses = {};
-  reqs.forEach((r) => {
-    const f = files.find((x) => x.id === matches[r.id]);
-    statuses[r.id] = computeStatus(r, f, expiry[r.id], tender.tender.submission_deadline);
-  });
-  const blockers = reqs.filter((r) => BLOCKING.has(statuses[r.id]));
-  const usedBy = {};
-  reqs.forEach((r) => { if (matches[r.id] !== undefined) usedBy[matches[r.id]] = r; });
+  const onAutoMatch = () => {
+    const suggestions = suggestMatches(reqs, files, matches);
+    Object.entries(suggestions).forEach(([reqId, fileId]) => {
+      const f = files.find((x) => x.id === fileId);
+      if (f) setMatches((m) => ({ ...m, [reqId]: fileId }));
+    });
+    const count = Object.keys(suggestions).length;
+    if (!count) addMessage('autoMatchNone', {});
+    else addMessage('autoMatchDone', { n: count });
+  };
 
-  const unreadable = reqs.filter((r) => {
-    const f = files.find((x) => x.id === matches[r.id]);
-    return f && f.pages === null;
-  });
+  const onSaveSession = async () => {
+    try {
+      if (!tender) return;
+      const text = await makeSession({ tender, source, files, matches, expiry, options: packageOptions });
+      downloadSession(text, `${tender.tender.tender_id}_Session.json`);
+    } catch { addMessage('sessionSaveError', {}); }
+  };
+
+  const onOpenSession = async (file) => {
+    try {
+      const data = readSession(await file.text());
+      setFiles(data.files); setMatches(data.matches); setExpiry(data.expiry);
+      setPackageOptions(data.options || { includeIndex: true, sealText: '', signatureText: '' });
+      loadFile(new File([JSON.stringify(data.tender)], 'requirements.json', { type: 'application/json' }));
+      addMessage('sessionOpenDone', {});
+    } catch { addMessage('sessionOpenError', {}); }
+  };
 
   const onGenerate = async () => {
     setBusy(true); setDone(false);
     try {
       const items = reqs.filter((r) => matches[r.id] !== undefined)
         .map((r) => ({ req: r, file: files.find((x) => x.id === matches[r.id]).file }));
-      const bytes = await buildPackage(tender.tender, items);
+      const bytes = await buildPackage(tender.tender, items, packageOptions);
       downloadBytes(bytes, `${tender.tender.tender_id.replace(/[\\/:*?"<>|]/g, '_')}_Package.pdf`);
       setDone(true);
     } catch (e) {
@@ -126,6 +144,21 @@ export default function App() {
     });
     downloadText(checklistCsv(rows), `${tender.tender.tender_id}_Checklist.csv`);
   };
+
+  const reqs = tender ? tender.requirements : [];
+  const statuses = {};
+  reqs.forEach((r) => {
+    const f = files.find((x) => x.id === matches[r.id]);
+    statuses[r.id] = computeStatus(r, f, expiry[r.id], tender.tender.submission_deadline);
+  });
+  const blockers = reqs.filter((r) => BLOCKING.has(statuses[r.id]));
+  const usedBy = {};
+  reqs.forEach((r) => { if (matches[r.id] !== undefined) usedBy[matches[r.id]] = r; });
+
+  const unreadable = reqs.filter((r) => {
+    const f = files.find((x) => x.id === matches[r.id]);
+    return f && f.pages === null;
+  });
 
   const step = !tender ? 0 : files.length === 0 ? 1
     : reqs.some((r) => statuses[r.id] === 'missing') ? 2 : blockers.length ? 3 : 4;
@@ -145,13 +178,23 @@ export default function App() {
           </div>
         )}
         <NextSteps lang={lang} current={step} />
+        <section className="card toolbar">
+          <button className="secondary" onClick={onSaveSession} disabled={!tender}>{t(lang, 'saveSession')}</button>
+          <label className="secondary fileButton">{t(lang, 'openSession')}<input type="file" accept=".json,application/json" hidden onChange={(e) => { if (e.target.files[0]) onOpenSession(e.target.files[0]); e.target.value = ''; }} /></label>
+          <span className="hint">{t(lang, 'sessionHint')}</span>
+        </section>
         <TenderInfo lang={lang} tender={tender} source={source} error={error} onLoadFile={loadFile} />
         <UploadArea lang={lang} onFiles={handleFiles} />
         <FileList lang={lang} files={files} usedBy={usedBy} dupNames={dupNames} onRemove={removeFile} />
         <RequirementsList lang={lang} tender={tender} files={files} matches={matches} expiry={expiry}
-          statuses={statuses} dupGroups={dupGroups} onMatch={onMatch} onExpiry={onExpiry} />
+          statuses={statuses} dupGroups={dupGroups} onMatch={onMatch} onExpiry={onExpiry} onAutoMatch={onAutoMatch} />
         <PackagePanel lang={lang} tender={tender} statuses={statuses} blockers={blockers} unreadable={unreadable}
-          busy={busy} done={done} onGenerate={onGenerate} onExportCsv={onExportCsv} />
+          busy={busy} done={done} options={packageOptions} setOptions={setPackageOptions}
+          onGenerate={onGenerate} onExportCsv={onExportCsv} onSaveSession={onSaveSession} onOpenSession={onOpenSession} />
+        <section className="card help-card">
+          <button className="secondary" onClick={() => setHelpOpen((x) => !x)}>{t(lang, helpOpen ? 'hideHelp' : 'showHelp')}</button>
+          {helpOpen && <div className="help"><h2>{t(lang, 'helpTitle')}</h2><p>{t(lang, 'helpText')}</p><ul><li>{t(lang, 'help1')}</li><li>{t(lang, 'help2')}</li><li>{t(lang, 'help3')}</li><li>{t(lang, 'help4')}</li></ul></div>}
+        </section>
       </main>
     </div>
   );
