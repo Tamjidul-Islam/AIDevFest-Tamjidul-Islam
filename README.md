@@ -1,1 +1,0 @@
-# AIDevFest-Tamjidul-Islam
